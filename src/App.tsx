@@ -36,7 +36,10 @@ export default function App() {
   const [botSelectorOpen, setBotSelectorOpen] = useState(false);
   const [agentSelectorOpen, setAgentSelectorOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [quickAccessOpen, setQuickAccessOpen] = useState(() => localStorage.getItem("memory-viewer-quickaccess-open") === "true");
+  const [quickAccessOpen, setQuickAccessOpen] = useState(() => {
+    const stored = localStorage.getItem("memory-viewer-quickaccess-open");
+    return stored === null ? true : stored === "true";
+  });
   const [teslaMode, setTeslaMode] = useState(() => localStorage.getItem("memory-viewer-tesla") === "true");
   const { zoom, setZoom, ZOOM_LEVELS } = useZoom();
   const { current: currentMdTheme, setTheme: setMdTheme, themes: mdThemes } = useMarkdownTheme();
