@@ -1,6 +1,6 @@
 import { useSyncExternalStore, RefObject } from "react";
 import { pluginRegistry } from "./registry";
-import { PluginSlotName } from "./types";
+import type { PluginSlotName } from "./types";
 
 interface PluginSlotProps {
   name: PluginSlotName;

@@ -112,7 +112,7 @@ export function SearchPanel({ onSelect, onClose }: SearchPanelProps) {
           />
           {loading && (
             <div className="flex items-center gap-2">
-              {mode !== "text" && <span className="text-xs" style={{ color: "var(--text-faint)" }}>搜索中…</span>}
+              {mode !== "text" && <span className="text-xs" style={{ color: "var(--text-faint)" }}>{t("search.loadingSemantic")}</span>}
               <div className="w-4 h-4 border-2 border-t-blue-400 rounded-full animate-spin" style={{ borderColor: "var(--border)" }} />
             </div>
           )}

@@ -52,12 +52,17 @@ export function Timeline({ onOpenFile }: Props) {
     }
     const zhMonths = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
     const enMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const fiMonths = ["Tammi", "Helmi", "Maalis", "Huhti", "Touko", "Kesä", "Heinä", "Elo", "Syys", "Loka", "Marras", "Joulu"];
     return Object.entries(map)
       .sort(([a], [b]) => b.localeCompare(a))
       .map(([k, entries]) => {
         const [y, m] = k.split("-");
         const mi = parseInt(m) - 1;
-        const label = locale.startsWith("zh") ? `${y} 年 ${zhMonths[mi]}` : `${enMonths[mi]} ${y}`;
+        const label = locale.startsWith("zh")
+          ? `${y} 年 ${zhMonths[mi]}`
+          : locale === "fi"
+            ? `${fiMonths[mi]} ${y}`
+            : `${enMonths[mi]} ${y}`;
         return {
           key: k,
           label,
@@ -88,7 +93,9 @@ export function Timeline({ onOpenFile }: Props) {
   const weekday = (d: string) => {
     const days = locale.startsWith("zh")
       ? ["日", "一", "二", "三", "四", "五", "六"]
-      : ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+      : locale === "fi"
+        ? ["Su", "Ma", "Ti", "Ke", "To", "Pe", "La"]
+        : ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     return days[new Date(d + "T00:00:00").getDay()];
   };
 

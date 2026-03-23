@@ -1,6 +1,8 @@
 import { createContext, useContext, useState, useCallback, useMemo } from "react";
 import { type Locale, translate } from "../i18n";
 
+const LOCALE_CYCLE: Locale[] = ["en", "fi", "zh"];
+
 interface LocaleContextValue {
   locale: Locale;
   setLocale: (l: Locale) => void;
@@ -11,7 +13,7 @@ interface LocaleContextValue {
 function getInitialLocale(): Locale {
   try {
     const saved = localStorage.getItem("mv-locale");
-    if (saved === "zh" || saved === "en") return saved;
+    if (saved === "zh" || saved === "en" || saved === "fi") return saved;
   } catch {}
   return "en";
 }
@@ -27,7 +29,8 @@ export function useLocaleState() {
   }, []);
 
   const toggleLocale = useCallback(() => {
-    setLocale(locale === "en" ? "zh" : "en");
+    const index = LOCALE_CYCLE.indexOf(locale);
+    setLocale(LOCALE_CYCLE[(index + 1) % LOCALE_CYCLE.length]);
   }, [locale, setLocale]);
 
   const t = useCallback((key: string) => translate(key, locale), [locale]);

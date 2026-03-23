@@ -93,10 +93,10 @@ export function CronManager() {
     setActionLoading(job.id);
     try {
       await toggleCronJob(job.id, !job.enabled);
-      showToast(`${!job.enabled ? "✅ 已启用" : "⏸ 已禁用"} ${job.name}`);
+      showToast(`${!job.enabled ? "✅" : "⏸"} ${t(!job.enabled ? "cron.enabledToast" : "cron.disabledToast")} ${job.name}`);
       await loadJobs();
     } catch (e: any) {
-      showToast(`❌ ${e.message || "操作失败"}`, "error");
+      showToast(`❌ ${e.message || t("cron.actionFailed")}`, "error");
     } finally {
       setActionLoading(null);
     }
@@ -107,13 +107,13 @@ export function CronManager() {
     try {
       const result = await runCronJob(job.id);
       if (result.success) {
-        showToast(`⚡ ${job.name} 已触发运行`);
+        showToast(`⚡ ${job.name} ${t("cron.runTriggered")}`);
         setTimeout(loadJobs, 2000);
       } else {
-        showToast(`❌ ${result.error || "运行失败"}`, "error");
+        showToast(`❌ ${result.error || t("cron.runFailed")}`, "error");
       }
     } catch (e: any) {
-      showToast(`❌ ${e.message || "请求失败"}`, "error");
+      showToast(`❌ ${e.message || t("cron.requestFailed")}`, "error");
     } finally {
       setActionLoading(null);
     }
@@ -209,7 +209,7 @@ export function CronManager() {
             }}
           >
             <Clock className="w-4 h-4" />
-            业务任务
+            {t("cron.userJobs")}
             <span
               className="ml-1 text-xs px-1.5 py-0.5 rounded-full"
               style={{ background: tab === "user" ? "var(--link)" : "var(--bg-hover)", color: tab === "user" ? "#fff" : "var(--text-muted)" }}
@@ -226,7 +226,7 @@ export function CronManager() {
             }}
           >
             <Gear className="w-4 h-4" />
-            系统调度
+            {t("cron.systemSchedules")}
             <span
               className="ml-1 text-xs px-1.5 py-0.5 rounded-full"
               style={{ background: tab === "system" ? "var(--link)" : "var(--bg-hover)", color: tab === "system" ? "#fff" : "var(--text-muted)" }}
@@ -438,12 +438,12 @@ export function CronManager() {
                   </div>
                   <span
                     className="text-[10px] px-2 py-0.5 rounded-full shrink-0"
-                    style={{
+                  style={{
                       background: sc.enabled ? "rgba(34,197,94,0.1)" : "var(--bg-hover)",
                       color: sc.enabled ? "#22c55e" : "var(--text-muted)",
                     }}
                   >
-                    {sc.enabled ? "运行中" : "禁用"}
+                    {sc.enabled ? t("cron.running") : t("cron.disabled")}
                   </span>
                 </div>
 
@@ -462,7 +462,7 @@ export function CronManager() {
                             <span className="ml-1" style={{ color: "var(--text-muted)" }}>({agent.id})</span>
                           </span>
                           <span style={{ color: agent.enabled ? "#22c55e" : "var(--text-muted)" }}>
-                            {agent.heartbeat === "disabled" ? "禁用" : agent.heartbeat}
+                            {agent.heartbeat === "disabled" ? t("cron.disabled") : agent.heartbeat}
                           </span>
                         </div>
                       ))}
@@ -475,7 +475,7 @@ export function CronManager() {
             {systemCrons.length === 0 && (
               <div className="text-center py-12" style={{ color: "var(--text-muted)" }}>
                 <Gear className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                <p>无法读取系统调度信息</p>
+                <p>{t("cron.systemInfoUnavailable")}</p>
               </div>
             )}
           </div>

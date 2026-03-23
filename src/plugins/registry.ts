@@ -1,5 +1,5 @@
-import { ComponentType } from "react";
-import { MemoryViewerPlugin, PluginSlotName, SlotProps } from "./types";
+import type { ComponentType } from "react";
+import type { MemoryViewerPlugin, PluginSlotName, SlotProps } from "./types";
 import { getBaseUrl } from "../api";
 
 const DISABLED_KEY = "mv-plugins-disabled";

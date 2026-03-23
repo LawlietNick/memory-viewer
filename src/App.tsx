@@ -8,6 +8,7 @@ import { Connections } from "./components/Connections";
 import { Changelog } from "./components/Changelog";
 import { SkillsPage } from "./components/SkillsPage";
 import { Timeline } from "./components/Timeline";
+import { MemoryCalendar } from "./components/MemoryCalendar";
 import { useWebSocket } from "./hooks/useWebSocket";
 import { useTheme } from "./hooks/useTheme";
 import { useSensitiveState, SensitiveProvider } from "./hooks/useSensitive";
@@ -29,7 +30,7 @@ export default function App() {
   const [files, setFiles] = useState<FileNode[]>([]);
   const [skills, setSkills] = useState<SkillInfo[]>([]);
   const [activeFile, setActiveFile] = useState("");
-  const [view, setView] = useState<"dashboard" | "file" | "connections" | "changelog" | "agent-status" | "skills" | "timeline" | "tags" | "cron" | "settings">("dashboard");
+  const [view, setView] = useState<"dashboard" | "file" | "connections" | "changelog" | "agent-status" | "skills" | "timeline" | "calendar" | "tags" | "cron" | "settings">("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -131,6 +132,7 @@ export default function App() {
       if (hash === "#/changelog") { setView("changelog"); return; }
       if (hash === "#/skills") { setView("skills"); return; }
       if (hash === "#/timeline") { setView("timeline"); return; }
+      if (hash === "#/calendar") { setView("calendar"); return; }
       if (hash === "#/tags") { setView("tags"); return; }
       if (hash === "#/cron") { setView("cron"); return; }
       if (hash === "#/settings") { setView("settings"); return; }
@@ -229,7 +231,7 @@ export default function App() {
                     <button onClick={toggleTheme} className="p-2 rounded-md transition-colors hover:bg-white/10 flex-1" style={{ color: "var(--text-muted)" }} title={theme === "dark" ? t("sidebar.lightMode") : t("sidebar.darkMode")}>
                       {theme === "dark" ? <Sun className="w-4 h-4 mx-auto" /> : <Moon className="w-4 h-4 mx-auto" />}
                     </button>
-                    <button onClick={toggleLocale} className="p-2 rounded-md transition-colors hover:bg-white/10 flex-1" style={{ color: "var(--text-muted)" }} title={locale === "en" ? "切换到中文" : "Switch to English"}>
+                    <button onClick={toggleLocale} className="p-2 rounded-md transition-colors hover:bg-white/10 flex-1" style={{ color: "var(--text-muted)" }} title={t("sidebar.language")}>
                       <Translate className="w-4 h-4 mx-auto" />
                     </button>
                   </div>
@@ -423,6 +425,17 @@ export default function App() {
               {t("sidebar.timeline") || "Timeline"}
             </button>
             <button
+              onClick={() => { setView("calendar"); setSidebarOpen(false); window.history.pushState(null, "", "#/calendar"); }}
+              className="flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors hover:bg-white/5"
+              style={{
+                color: view === "calendar" ? "var(--link)" : "var(--text-secondary)",
+                background: view === "calendar" ? "var(--bg-active)" : undefined,
+              }}
+            >
+              <Calendar className="w-4 h-4 text-emerald-400" />
+              {t("sidebar.calendar")}
+            </button>
+            <button
               onClick={() => { setView("tags"); setSidebarOpen(false); window.history.pushState(null, "", "#/tags"); }}
               className="flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors hover:bg-white/5"
               style={{
@@ -558,7 +571,7 @@ export default function App() {
             <List className="w-6 h-6" />
           </button>
           <span className="text-sm font-medium truncate">
-            {view === "file" ? activeFile : view === "changelog" ? t("changelog.title") : view === "connections" ? t("connections.title") : view === "agent-status" ? t("sidebar.agentConfig") : view === "timeline" ? t("timeline.title") : view === "tags" ? t("tags.title") : view === "cron" ? t("cron.title") : view === "settings" ? t("settings.title") : t("dashboard.title")}
+            {view === "file" ? activeFile : view === "changelog" ? t("changelog.title") : view === "connections" ? t("connections.title") : view === "agent-status" ? t("sidebar.agentConfig") : view === "timeline" ? t("timeline.title") : view === "calendar" ? t("calendar.title") : view === "tags" ? t("tags.title") : view === "cron" ? t("cron.title") : view === "settings" ? t("settings.title") : t("dashboard.title")}
           </span>
           <button onClick={() => window.location.reload()} className="ml-auto p-1" style={{ color: "var(--text-muted)" }} title="Refresh">
             <ArrowsClockwise className="w-5 h-5" />
@@ -597,6 +610,10 @@ export default function App() {
           ) : view === "timeline" ? (
             <div className="h-full overflow-auto">
               <Timeline onOpenFile={openFile} />
+            </div>
+          ) : view === "calendar" ? (
+            <div className="h-full overflow-auto">
+              <MemoryCalendar onOpenFile={openFile} />
             </div>
           ) : view === "tags" ? (
             <div className="h-full overflow-auto">
