@@ -26,7 +26,59 @@ interface HoverPreviewState {
   y: number;
 }
 
+interface PopoverPosition {
+  top: number;
+  left: number;
+  width: number;
+}
+
 const DAY_MS = 24 * 60 * 60 * 1000;
+const POPOVER_GAP = 10;
+const VIEWPORT_PADDING = 16;
+const MOBILE_BREAKPOINT = 768;
+
+export function computePopoverPosition(
+  anchor: Pick<DOMRect, "top" | "left" | "right" | "bottom" | "width" | "height">,
+  viewport: { width: number; height: number },
+  popover: { width: number; height: number }
+): PopoverPosition {
+  const width = Math.min(popover.width, Math.max(280, viewport.width - VIEWPORT_PADDING * 2));
+  const maxLeft = Math.max(VIEWPORT_PADDING, viewport.width - width - VIEWPORT_PADDING);
+
+  if (viewport.width < MOBILE_BREAKPOINT) {
+    return {
+      width,
+      left: Math.max(VIEWPORT_PADDING, (viewport.width - width) / 2),
+      top: Math.max(
+        VIEWPORT_PADDING,
+        Math.min(anchor.bottom + POPOVER_GAP, viewport.height - popover.height - VIEWPORT_PADDING)
+      ),
+    };
+  }
+
+  const spaceBelow = viewport.height - anchor.bottom - VIEWPORT_PADDING;
+  const spaceAbove = anchor.top - VIEWPORT_PADDING;
+  const top = spaceBelow >= popover.height || spaceBelow >= spaceAbove
+    ? Math.min(anchor.bottom + POPOVER_GAP, viewport.height - popover.height - VIEWPORT_PADDING)
+    : Math.max(VIEWPORT_PADDING, anchor.top - popover.height - POPOVER_GAP);
+
+  let left = anchor.left;
+  if (anchor.left + width + VIEWPORT_PADDING > viewport.width) {
+    left = anchor.right - width;
+  }
+  if (left < VIEWPORT_PADDING || left > maxLeft) {
+    left = Math.min(
+      maxLeft,
+      Math.max(VIEWPORT_PADDING, anchor.left + anchor.width / 2 - width / 2)
+    );
+  }
+
+  return {
+    top,
+    left,
+    width,
+  };
+}
 
 export function groupEntriesByDate(entries: TimelineEntry[]): Map<string, CalendarDay> {
   const grouped = new Map<string, CalendarDay>();
@@ -124,6 +176,7 @@ export function MemoryCalendar({ onOpenFile }: Props) {
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [popoverAnchor, setPopoverAnchor] = useState<DOMRect | null>(null);
+  const [popoverPosition, setPopoverPosition] = useState<PopoverPosition | null>(null);
   const [hoverPreview, setHoverPreview] = useState<HoverPreviewState | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const today = useMemo(() => new Date(), []);
@@ -149,6 +202,7 @@ export function MemoryCalendar({ onOpenFile }: Props) {
       if (popoverRef.current.contains(event.target as Node)) return;
       setSelectedDate(null);
       setPopoverAnchor(null);
+      setPopoverPosition(null);
     };
 
     document.addEventListener("mousedown", onPointerDown);
@@ -160,6 +214,26 @@ export function MemoryCalendar({ onOpenFile }: Props) {
   const selectedDay = selectedDate ? grouped.get(selectedDate) || null : null;
   const currentMonthHasEntries = monthCells.some((cell) => cell.day);
 
+  useEffect(() => {
+    if (!selectedDay || !popoverAnchor || !popoverRef.current) return;
+
+    const updatePosition = () => {
+      if (!popoverRef.current || !popoverAnchor) return;
+      const rect = popoverRef.current.getBoundingClientRect();
+      setPopoverPosition(
+        computePopoverPosition(
+          popoverAnchor,
+          { width: window.innerWidth, height: window.innerHeight },
+          { width: rect.width, height: rect.height }
+        )
+      );
+    };
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    return () => window.removeEventListener("resize", updatePosition);
+  }, [selectedDay, popoverAnchor]);
+
   const weekDays = locale.startsWith("zh")
     ? ["日", "一", "二", "三", "四", "五", "六"]
     : locale === "fi"
@@ -169,6 +243,7 @@ export function MemoryCalendar({ onOpenFile }: Props) {
   const openDayPopover = (day: CalendarDay, target: HTMLElement) => {
     setSelectedDate(day.date);
     setPopoverAnchor(target.getBoundingClientRect());
+    setPopoverPosition(null);
     const dayDate = new Date(`${day.date}T00:00:00`);
     if (!sameMonth(currentMonth, dayDate)) {
       setCurrentMonth(new Date(dayDate.getFullYear(), dayDate.getMonth(), 1));
@@ -379,14 +454,17 @@ export function MemoryCalendar({ onOpenFile }: Props) {
         <div
           ref={popoverRef}
           data-testid="calendar-day-popover"
-          className="fixed w-[min(26rem,calc(100vw-2rem))] rounded-2xl p-4"
+          className="fixed rounded-2xl p-4"
           style={{
-            top: Math.min(popoverAnchor.bottom + 10, window.innerHeight - 24),
-            left: Math.min(Math.max(popoverAnchor.left, 16), window.innerWidth - 432),
+            top: popoverPosition?.top ?? -9999,
+            left: popoverPosition?.left ?? -9999,
+            width: popoverPosition?.width ?? "min(26rem, calc(100vw - 2rem))",
             background: "var(--bg-secondary)",
             border: "1px solid var(--border)",
             boxShadow: "0 16px 48px rgba(0,0,0,0.32)",
             zIndex: 40,
+            visibility: popoverPosition ? "visible" : "hidden",
+            maxHeight: `calc(100vh - ${VIEWPORT_PADDING * 2}px)`,
           }}
         >
           <div className="flex items-start justify-between gap-3 mb-3">
@@ -403,6 +481,7 @@ export function MemoryCalendar({ onOpenFile }: Props) {
               onClick={() => {
                 setSelectedDate(null);
                 setPopoverAnchor(null);
+                setPopoverPosition(null);
               }}
               className="text-xs px-2 py-1 rounded-md transition-colors hover:bg-white/5"
               style={{ color: "var(--text-muted)" }}
@@ -419,6 +498,7 @@ export function MemoryCalendar({ onOpenFile }: Props) {
                 onClick={() => {
                   setSelectedDate(null);
                   setPopoverAnchor(null);
+                  setPopoverPosition(null);
                   onOpenFile(entry.path);
                 }}
                 className="w-full text-left rounded-xl p-3 transition-colors hover:bg-white/5"

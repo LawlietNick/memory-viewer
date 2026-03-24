@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryCalendar, buildMonthCells, groupEntriesByDate } from "./MemoryCalendar";
+import { MemoryCalendar, buildMonthCells, computePopoverPosition, groupEntriesByDate } from "./MemoryCalendar";
 import { LocaleContext } from "../hooks/useLocale";
 import type { TimelineEntry } from "../api";
 
@@ -97,6 +97,27 @@ describe("MemoryCalendar helpers", () => {
     expect(cells.slice(0, 6).every((cell) => cell.date === null)).toBe(true);
     expect(cells[6].date).toBe("2025-03-01");
     expect(cells[10].day?.count).toBe(2);
+  });
+
+  it("keeps the popover inside the viewport near the right edge", () => {
+    const position = computePopoverPosition(
+      { top: 320, left: 860, right: 980, bottom: 420, width: 120, height: 100 },
+      { width: 1024, height: 768 },
+      { width: 416, height: 280 }
+    );
+
+    expect(position.left).toBeGreaterThanOrEqual(16);
+    expect(position.left + position.width).toBeLessThanOrEqual(1024 - 16);
+  });
+
+  it("places the popover above the anchor when there is not enough room below", () => {
+    const position = computePopoverPosition(
+      { top: 620, left: 300, right: 420, bottom: 720, width: 120, height: 100 },
+      { width: 1280, height: 800 },
+      { width: 416, height: 240 }
+    );
+
+    expect(position.top).toBeLessThan(620);
   });
 });
 
