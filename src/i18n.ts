@@ -88,6 +88,11 @@ const dict: Record<string, Record<Locale, string>> = {
   "file.loading": { en: "Loading…", fi: "Ladataan…", zh: "加载中…" },
   "file.backToTop": { en: "Back to top", fi: "Takaisin ylös", zh: "返回顶部" },
   "file.copy": { en: "Copy", fi: "Kopioi", zh: "复制" },
+  "file.showPreview": { en: "Show Preview", fi: "Näytä esikatselu", zh: "显示预览" },
+  "file.hidePreview": { en: "Hide Preview", fi: "Piilota esikatselu", zh: "隐藏预览" },
+  "file.editorTab": { en: "Editor", fi: "Muokkain", zh: "编辑器" },
+  "file.previewTab": { en: "Preview", fi: "Esikatselu", zh: "预览" },
+  "file.livePreview": { en: "Live Preview", fi: "Live-esikatselu", zh: "实时预览" },
 
   // Changelog
   "changelog.title": { en: "Changelog", fi: "Muutosloki", zh: "更新日志" },

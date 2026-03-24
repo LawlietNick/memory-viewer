@@ -12,15 +12,18 @@ interface MarkdownEditorProps {
   onChange: (value: string) => void;
   onSave: () => void;
   dark?: boolean;
+  onScrollRatioChange?: (ratio: number) => void;
 }
 
-export function MarkdownEditor({ value, onChange, onSave, dark = true }: MarkdownEditorProps) {
+export function MarkdownEditor({ value, onChange, onSave, dark = true, onScrollRatioChange }: MarkdownEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
   const onSaveRef = useRef(onSave);
+  const onScrollRatioChangeRef = useRef(onScrollRatioChange);
   onChangeRef.current = onChange;
   onSaveRef.current = onSave;
+  onScrollRatioChangeRef.current = onScrollRatioChange;
 
   // Track if update is from external prop change
   const externalUpdate = useRef(false);
@@ -48,6 +51,12 @@ export function MarkdownEditor({ value, onChange, onSave, dark = true }: Markdow
         EditorView.updateListener.of((update) => {
           if (update.docChanged && !externalUpdate.current) {
             onChangeRef.current(update.state.doc.toString());
+          }
+          if (update.viewportChanged || update.docChanged) {
+            const scroller = update.view.scrollDOM;
+            const maxScroll = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+            const ratio = maxScroll === 0 ? 0 : scroller.scrollTop / maxScroll;
+            onScrollRatioChangeRef.current?.(Math.min(1, Math.max(0, ratio)));
           }
         }),
         EditorView.theme({

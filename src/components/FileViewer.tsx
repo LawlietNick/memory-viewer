@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo, useLayoutEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkFrontmatter from "remark-frontmatter";
@@ -15,6 +15,9 @@ import { useMarkdownTheme } from "../themes";
 import { applyThemeStyles, cleanInlineStyles } from "../themes/apply";
 import mermaid from "mermaid";
 const MarkdownEditor = lazy(() => import("./MarkdownEditor").then(m => ({ default: m.MarkdownEditor })));
+
+const SPLIT_PREVIEW_KEY = "memory-viewer-split-preview";
+const EDITOR_PREVIEW_BREAKPOINT = 1024;
 
 // Initialize mermaid for different styles
 function initMermaid(isDark: boolean, handDrawn: boolean) {
@@ -153,6 +156,58 @@ function parseFrontMatter(raw: string): FrontMatterResult {
   return { meta: Object.keys(meta).length ? meta : null, metadata, body };
 }
 
+function FrontMatterCard({ frontMatter, isDark }: { frontMatter: FrontMatterResult; isDark: boolean }) {
+  if (!frontMatter.meta && !frontMatter.metadata) return null;
+
+  const md = frontMatter.metadata;
+  const cb = md?.clawdbot || md?.openclaw;
+  const emoji = cb?.emoji || "🧩";
+  const requires = cb?.requires;
+  const extraMeta = frontMatter.meta ? Object.entries(frontMatter.meta).filter(([k]) => k !== "name" && k !== "description") : [];
+
+  return (
+    <div className="mb-6 rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
+      <div className="px-5 py-2.5" style={{ background: isDark ? "linear-gradient(135deg, #1e293b, #1a1c2b)" : "linear-gradient(135deg, #f5f0eb, #faf8f5)" }}>
+        <div className="flex items-center gap-3">
+          {frontMatter.meta?.name && (
+            <div className="flex items-center gap-2">
+              <span className="text-lg">{emoji}</span>
+              <h2 className="text-lg font-bold" style={{ color: "var(--link)" }}>{frontMatter.meta.name}</h2>
+            </div>
+          )}
+        </div>
+        {frontMatter.meta?.description && (
+          <p className="text-sm mt-2 leading-relaxed" style={{ color: "var(--text-secondary)" }}>{frontMatter.meta.description}</p>
+        )}
+      </div>
+      {(extraMeta.length > 0 || requires) && (
+        <div className="px-5 py-2.5 flex flex-wrap gap-2" style={{ background: "var(--bg-tertiary)", borderTop: "1px solid var(--border)" }}>
+          {extraMeta.map(([k, v]) => (
+            <span key={k} className="inline-flex items-center gap-1 text-xs rounded-full px-2.5 py-1 font-medium" style={{ background: "var(--bg-active)", color: "var(--link)" }}>
+              <span style={{ color: "var(--text-faint)" }}>{k}:</span> {v}
+            </span>
+          ))}
+          {requires?.skills?.map((s: string) => (
+            <span key={s} className="inline-flex items-center gap-1 text-xs rounded-full px-2.5 py-1 font-medium" style={{ background: isDark ? "rgba(139,92,246,0.15)" : "rgba(139,92,246,0.1)", color: isDark ? "#a78bfa" : "#7c3aed" }}>
+              🔗 {s}
+            </span>
+          ))}
+          {requires?.tools?.map((t: string) => (
+            <span key={t} className="inline-flex items-center gap-1 text-xs rounded-full px-2.5 py-1 font-medium" style={{ background: isDark ? "rgba(34,197,94,0.15)" : "rgba(34,197,94,0.1)", color: isDark ? "#4ade80" : "#16a34a" }}>
+              🔧 {t}
+            </span>
+          ))}
+          {requires?.secrets?.map((s: string) => (
+            <span key={s} className="inline-flex items-center gap-1 text-xs rounded-full px-2.5 py-1 font-medium" style={{ background: isDark ? "rgba(251,191,36,0.15)" : "rgba(251,191,36,0.1)", color: isDark ? "#fbbf24" : "#d97706" }}>
+              🔑 {s}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Recursively wrap string children with SensitiveText and WikiLinks */
 function maskChildren(children: React.ReactNode, onOpenFile?: (path: string) => void): React.ReactNode {
   if (typeof children === "string") {
@@ -190,6 +245,7 @@ function getHighlighter(): Promise<Highlighter> {
   }
   return highlighterPromise;
 }
+void getHighlighter();
 
 /** Code block with copy button */
 function CodeBlock({ className, children, ...props }: any) {
@@ -278,6 +334,45 @@ function CodeBlock({ className, children, ...props }: any) {
         </pre>
       )}
     </div>
+  );
+}
+
+function RenderedMarkdownDocument({
+  source,
+  frontMatter,
+  onOpenFile,
+  isDark,
+  maxWidthClass,
+}: {
+  source: string;
+  frontMatter: FrontMatterResult;
+  onOpenFile?: (path: string) => void;
+  isDark: boolean;
+  maxWidthClass: string;
+}) {
+  return (
+    <article className={`markdown-body ${maxWidthClass}`}>
+      <FrontMatterCard frontMatter={frontMatter} isDark={isDark} />
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, remarkFrontmatter]}
+        rehypePlugins={[rehypeRaw]}
+        components={{
+          pre({ children }) {
+            return <>{children}</>;
+          },
+          code: CodeBlock,
+          p({ children }) {
+            return <p>{maskChildren(children, onOpenFile)}</p>;
+          },
+          li({ children }) {
+            return <li>{maskChildren(children, onOpenFile)}</li>;
+          },
+          td({ children }) {
+            return <td>{maskChildren(children, onOpenFile)}</td>;
+          },
+        }}
+      >{source}</ReactMarkdown>
+    </article>
   );
 }
 
@@ -390,12 +485,28 @@ export function FileViewer({ filePath, refreshKey, onNavigate, onOpenFile }: Fil
   const [toast, setToast] = useState("");
   const [conflict, setConflict] = useState<ConflictResult | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const { current: mdTheme } = useMarkdownTheme();
+  const [previewVisible, setPreviewVisible] = useState(() => {
+    try {
+      const stored = localStorage.getItem(SPLIT_PREVIEW_KEY);
+      return stored === null ? true : stored === "true";
+    } catch {
+      return true;
+    }
+  });
+  const [activeEditTab, setActiveEditTab] = useState<"editor" | "preview">("editor");
+  const [isNarrow, setIsNarrow] = useState(() => window.innerWidth < EDITOR_PREVIEW_BREAKPOINT);
+  const [editorScrollRatio, setEditorScrollRatio] = useState(0);
+  const programmaticPreviewScroll = useRef(false);
+  const previewSyncPauseUntil = useRef(0);
 
   useEffect(() => {
     setLoading(true);
     setEditing(false);
+    setActiveEditTab("editor");
+    setEditorScrollRatio(0);
     fetchFile(filePath)
       .then((data) => {
         setContent(data.content);
@@ -479,6 +590,7 @@ export function FileViewer({ filePath, refreshKey, onNavigate, onOpenFile }: Fil
     if (hasChanges && !confirm(t("file.discardChanges"))) return;
     setEditContent(content);
     setEditing(false);
+    setActiveEditTab("editor");
   };
 
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains("dark"));
@@ -490,7 +602,22 @@ export function FileViewer({ filePath, refreshKey, onNavigate, onOpenFile }: Fil
 
   const handleEdit = () => {
     setEditing(true);
+    setActiveEditTab("editor");
   };
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SPLIT_PREVIEW_KEY, String(previewVisible));
+    } catch {
+      // Ignore storage errors
+    }
+  }, [previewVisible]);
+
+  useEffect(() => {
+    const onResize = () => setIsNarrow(window.innerWidth < EDITOR_PREVIEW_BREAKPOINT);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
@@ -501,17 +628,42 @@ export function FileViewer({ filePath, refreshKey, onNavigate, onOpenFile }: Fil
   }, [hasChanges]);
 
   const frontMatter = useMemo(() => parseFrontMatter(content), [content]);
+  const editFrontMatter = useMemo(() => parseFrontMatter(editContent), [editContent]);
+  const showSplitPreview = editing && !isNarrow && previewVisible;
+  const showPreviewPane = editing && (showSplitPreview || activeEditTab === "preview");
+  const showEditorPane = editing && (!isNarrow || activeEditTab === "editor");
 
   // Apply markdown theme
-  useEffect(() => {
-    if (!contentRef.current || editing) return;
-    const article = contentRef.current.querySelector(".markdown-body");
-    if (!article || (!mdTheme.styles && !mdTheme.darkStyles)) {
-      cleanInlineStyles(article);
-      return;
+  useLayoutEffect(() => {
+    const containers = editing ? [previewRef.current] : [contentRef.current];
+    for (const container of containers) {
+      const article = container?.querySelector(".markdown-body");
+      if (!article) continue;
+      if (!mdTheme.styles && !mdTheme.darkStyles) {
+        cleanInlineStyles(article);
+        continue;
+      }
+      applyThemeStyles(article as HTMLElement, mdTheme);
     }
-    applyThemeStyles(article as HTMLElement, mdTheme);
-  }, [content, mdTheme, editing, refreshKey, isDark]);
+  }, [content, editContent, mdTheme, editing, refreshKey, isDark, showPreviewPane]);
+
+  useEffect(() => {
+    if (!editing || !showPreviewPane || !previewRef.current) return;
+    if (Date.now() < previewSyncPauseUntil.current) return;
+
+    const container = previewRef.current;
+    const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
+    const nextTop = editorScrollRatio * maxScroll;
+    programmaticPreviewScroll.current = true;
+    if (typeof container.scrollTo === "function") {
+      container.scrollTo({ top: nextTop, behavior: "auto" });
+    } else {
+      container.scrollTop = nextTop;
+    }
+    requestAnimationFrame(() => {
+      programmaticPreviewScroll.current = false;
+    });
+  }, [editorScrollRatio, editing, showPreviewPane, editContent]);
 
   const fileStats = useMemo(() => {
     const bytes = new Blob([content]).size;
@@ -562,6 +714,14 @@ export function FileViewer({ filePath, refreshKey, onNavigate, onOpenFile }: Fil
               <button onClick={handleCancel} className="btn-secondary text-sm flex items-center gap-1">
                 <X className="w-3.5 h-3.5" /> {t("file.cancel")}
               </button>
+              {!isNarrow && (
+                <button
+                  onClick={() => setPreviewVisible((value) => !value)}
+                  className="btn-secondary text-sm"
+                >
+                  {previewVisible ? t("file.hidePreview") : t("file.showPreview")}
+                </button>
+              )}
             </>
           ) : (
             <>
@@ -581,88 +741,83 @@ export function FileViewer({ filePath, refreshKey, onNavigate, onOpenFile }: Fil
       {/* Content */}
       <div className="flex-1 overflow-auto p-4 sm:p-6 relative" ref={contentRef} onScroll={handleScroll}>
         {editing ? (
-          <Suspense fallback={<div style={{ padding: 20, color: "var(--text-muted)" }}>Loading editor...</div>}>
-            <MarkdownEditor
-              value={editContent}
-              onChange={setEditContent}
-              onSave={handleSave}
-              dark={isDark}
-            />
-          </Suspense>
-        ) : (
-          <article className="markdown-body max-w-3xl mx-auto">
-            {(frontMatter.meta || frontMatter.metadata) && (() => {
-              const md = frontMatter.metadata;
-              const cb = md?.clawdbot || md?.openclaw;
-              const emoji = cb?.emoji || "🧩";
-              const requires = cb?.requires;
-              const extraMeta = frontMatter.meta ? Object.entries(frontMatter.meta).filter(([k]) => k !== "name" && k !== "description") : [];
-              return (
-              <div className="mb-6 rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
-                {/* Header */}
-                <div className="px-5 py-2.5" style={{ background: isDark ? "linear-gradient(135deg, #1e293b, #1a1c2b)" : "linear-gradient(135deg, #f5f0eb, #faf8f5)" }}>
-                  <div className="flex items-center gap-3">
-                    {frontMatter.meta?.name && (
-                      <div className="flex items-center gap-2">
-                        <span className="text-lg">{emoji}</span>
-                        <h2 className="text-lg font-bold" style={{ color: "var(--link)" }}>{frontMatter.meta.name}</h2>
-                      </div>
-                    )}
-                  </div>
-                  {frontMatter.meta?.description && (
-                    <p className="text-sm mt-2 leading-relaxed" style={{ color: "var(--text-secondary)" }}>{frontMatter.meta.description}</p>
-                  )}
-                </div>
-                {/* Tags: extra fields + requires */}
-                {(extraMeta.length > 0 || requires) && (
-                  <div className="px-5 py-2.5 flex flex-wrap gap-2" style={{ background: "var(--bg-tertiary)", borderTop: "1px solid var(--border)" }}>
-                    {extraMeta.map(([k, v]) => (
-                      <span key={k} className="inline-flex items-center gap-1 text-xs rounded-full px-2.5 py-1 font-medium" style={{ background: "var(--bg-active)", color: "var(--link)" }}>
-                        <span style={{ color: "var(--text-faint)" }}>{k}:</span> {v}
-                      </span>
-                    ))}
-                    {requires?.skills?.map((s: string) => (
-                      <span key={s} className="inline-flex items-center gap-1 text-xs rounded-full px-2.5 py-1 font-medium" style={{ background: isDark ? "rgba(139,92,246,0.15)" : "rgba(139,92,246,0.1)", color: isDark ? "#a78bfa" : "#7c3aed" }}>
-                        🔗 {s}
-                      </span>
-                    ))}
-                    {requires?.tools?.map((t: string) => (
-                      <span key={t} className="inline-flex items-center gap-1 text-xs rounded-full px-2.5 py-1 font-medium" style={{ background: isDark ? "rgba(34,197,94,0.15)" : "rgba(34,197,94,0.1)", color: isDark ? "#4ade80" : "#16a34a" }}>
-                        🔧 {t}
-                      </span>
-                    ))}
-                    {requires?.secrets?.map((s: string) => (
-                      <span key={s} className="inline-flex items-center gap-1 text-xs rounded-full px-2.5 py-1 font-medium" style={{ background: isDark ? "rgba(251,191,36,0.15)" : "rgba(251,191,36,0.1)", color: isDark ? "#fbbf24" : "#d97706" }}>
-                        🔑 {s}
-                      </span>
-                    ))}
-                  </div>
-                )}
+          <div className="h-full min-h-0 flex flex-col gap-4">
+            {isNarrow && (
+              <div className="flex items-center gap-1 p-1 rounded-lg self-start" style={{ background: "var(--bg-secondary)", border: "1px solid var(--border)" }}>
+                {(["editor", "preview"] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setActiveEditTab(tab)}
+                    className="px-3 py-1.5 rounded-md text-sm transition-colors"
+                    style={{
+                      background: activeEditTab === tab ? "var(--bg-active)" : "transparent",
+                      color: activeEditTab === tab ? "var(--link)" : "var(--text-muted)",
+                    }}
+                  >
+                    {tab === "editor" ? t("file.editorTab") : t("file.previewTab")}
+                  </button>
+                ))}
               </div>
-              );
-            })()}
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm, remarkFrontmatter]}
-              rehypePlugins={[rehypeRaw]}
-              components={{
-                pre({ children }) {
-                  // Shiki/CodeBlock handles its own wrapper, so just pass through
-                  return <>{children}</>;
-                },
-                code: CodeBlock,
-                // Mask in plain text nodes within paragraphs
-                p({ children }) {
-                  return <p>{maskChildren(children, onOpenFile)}</p>;
-                },
-                li({ children }) {
-                  return <li>{maskChildren(children, onOpenFile)}</li>;
-                },
-                td({ children }) {
-                  return <td>{maskChildren(children, onOpenFile)}</td>;
-                },
-              }}
-            >{content}</ReactMarkdown>
-          </article>
+            )}
+
+            <div className={`flex-1 min-h-0 ${showSplitPreview ? "grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]" : ""}`}>
+              {showEditorPane && (
+                <div
+                  className="min-h-0 overflow-hidden rounded-xl"
+                  style={{ border: showSplitPreview ? "1px solid var(--border)" : undefined, background: showSplitPreview ? "var(--bg-secondary)" : undefined }}
+                >
+                  <Suspense fallback={<div style={{ padding: 20, color: "var(--text-muted)" }}>Loading editor...</div>}>
+                    <MarkdownEditor
+                      value={editContent}
+                      onChange={setEditContent}
+                      onSave={handleSave}
+                      dark={isDark}
+                      onScrollRatioChange={setEditorScrollRatio}
+                    />
+                  </Suspense>
+                </div>
+              )}
+
+              {showPreviewPane && (
+                <div
+                  className="min-h-0 overflow-auto rounded-xl"
+                  ref={previewRef}
+                  data-testid="file-edit-preview"
+                  onScroll={(e) => {
+                    if (programmaticPreviewScroll.current) return;
+                    if (e.isTrusted) {
+                      previewSyncPauseUntil.current = Date.now() + 1200;
+                    }
+                  }}
+                  style={{ border: "1px solid var(--border)", background: "var(--bg-secondary)" }}
+                >
+                  <div className="sticky top-0 z-10 px-4 py-2 border-b backdrop-blur-sm" style={{ borderColor: "var(--border)", background: "color-mix(in srgb, var(--bg-secondary) 92%, transparent)" }}>
+                    <div className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--text-faint)" }}>
+                      {t("file.livePreview")}
+                    </div>
+                  </div>
+                  <div className="p-4">
+                    <RenderedMarkdownDocument
+                      source={editContent}
+                      frontMatter={editFrontMatter}
+                      onOpenFile={onOpenFile}
+                      isDark={isDark}
+                      maxWidthClass="max-w-none"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <RenderedMarkdownDocument
+            source={content}
+            frontMatter={frontMatter}
+            onOpenFile={onOpenFile}
+            isDark={isDark}
+            maxWidthClass="max-w-3xl mx-auto"
+          />
         )}
       </div>
 
